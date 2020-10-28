@@ -5,15 +5,21 @@ from kivy.app import App
 from kivy.lang import Builder
 from kivy.uix.widget import Widget
 from kivy.properties import ObjectProperty
+from kivy.properties import ListProperty
 from kivy.uix.label import Label
+from kivy.uix.gridlayout import GridLayout
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import (ScreenManager, Screen, NoTransition, SlideTransition, CardTransition, SwapTransition, FadeTransition, WipeTransition, FallOutTransition, RiseInTransition)
 from kivy.graphics import Color
 from database import Database
+from kivy.uix.dropdown import DropDown
+from kivy.uix.button import Button
+from kivy.base import runTouchApp
 import os.path
 from kivy.clock import Clock
+import time
 
 kv = Builder.load_file("pacemakerlogin.kv")
 
@@ -29,7 +35,7 @@ class WelcomeWindow(Screen):
         manageWin.current = "loginWin"
     
     def goToReg(self):
-        if(len(userDatabase.users) < 10):
+        if(len(userDatabase.users) < 10):       ## there are less than 10 accounts
             manageWin.transition = SlideTransition()
             manageWin.transition.direction = "right"
             manageWin.current = "registerWin"
@@ -47,14 +53,14 @@ class LoginWindow(Screen):
 
 
     def btnLogin(self):
-        ## Check username and password for correctness
-
         user = self.nameField.text
         password = self.passwField.text
 
+        ## Check username and password for correctness
         ## if good...
         if(userDatabase.credentialCheck(user, password)):
             manageWin.transition = RiseInTransition()
+            manageWin.transition.duration = 0.15
             manageWin.current = "mainWin"
             MainWindow.currentUsername = user
             self.reset() ## clear the form
@@ -97,6 +103,7 @@ class RegisterWindow(Screen):
                 self.reset() ## clear the form
                 manageWin.transition = SlideTransition()
                 manageWin.transition.direction = "left"
+                manageWin.transition.duration = 0.15
                 manageWin.current = "welcomeWin"
                 registerComplete() # popup
             else:
@@ -130,10 +137,28 @@ class RegisterWindow(Screen):
 
 class MainWindow(Screen):
     currentUser = ObjectProperty(None)
+    display_active_pacingMode = ObjectProperty(None)
+    display_heartbeat_bpm = ObjectProperty(None)
     currentUsername = ""
 
+    ## Indicator for connected Hardware
+    indicatorColour = ListProperty([1,0,0,1]) ## defaults to red, becomes green if connected
+    
+
+    global pacingMode
+    global heartBPM
+
     def on_enter(self, *args):
-        self.currentUser.text = "Name: " + userDatabase.get_user(self.currentUsername)[0]
+        self.currentUser.text = "Active User: " + userDatabase.get_user(self.currentUsername)[0]
+        self.display_active_pacingMode.text = "Pacing Mode: " + pacingMode
+        self.display_heartbeat_bpm.text = "BPM: " + str(heartBPM)
+
+        ## set hardware connected indicator
+        global hardwareConnected
+        if(hardwareConnected):
+            self.indicatorColour = [0,1,0,1] ## green
+        else: 
+            self.indicatorColour = [1,0,0,1] ## defaults to red
 
     def logout(self):
         #edit transition
@@ -143,59 +168,170 @@ class MainWindow(Screen):
         ## idea! popout: "Logout Successful"
         signOut_Complete()
     
-    ## Option to delete account!!
+    ## Option to delete account
     def deleteAccount(self):
         userDatabase.remove_user(self.currentUsername)
         manageWin.transition = FallOutTransition()
         manageWin.transition.duration = 0.15
         manageWin.current = "welcomeWin"
         userDeleted()
-
-
-## WindowManager ----------------------------------------
-
-class WindowManager(ScreenManager):
-    pass
-
-manageWin = WindowManager(transition=SlideTransition())
-
-## Add all the pages
-manageWin.add_widget(WelcomeWindow(name="welcomeWin"))
-manageWin.add_widget(LoginWindow(name="loginWin"))
-manageWin.add_widget(RegisterWindow(name="registerWin"))
-manageWin.add_widget(MainWindow(name="mainWin"))
-
-manageWin.current = "welcomeWin"
-
-
-
-## Error Popup stuff ----------------------------------------------------------------------
-
-class errorPopup(FloatLayout):
-    ## The following isn't working!
-    #dialogueMessage = ObjectProperty(None)
-    # def setMessage(self,message):
-    #     self.dialogueMessage.text = "Hellow"
     
+    ## Mode Popup window is displayed
+    def open_modeSelector(self):
+        show = modeSelectorPopup()
+        global popupWindow
+        popupWindow = Popup(title="Pacemaker Modes", content=show,size_hint=(None,None), size=(500,500))
+        popupWindow.open()
+
+    ## Programmable Parameters Popup window is displayed
+    def open_programmableParameters(self):
+        show = programmableParametersPopup()
+        global popupWindow
+        popupWindow = Popup(title="Programmable Parameters", content=show,size_hint=(None,None), size=(500,500))
+        popupWindow.open()
+    
+
+## Global Vars and Functions ----------------------------------------------------------------------
+
+
+#change this for assignment 2
+hardwareConnected = False ## set to board for assignment 2
+heartBPM = 100
+
+
+pacingMode = "Not Set"
+def setPacingModetext(mode):
+    global pacingMode
+    pacingMode = mode
+    print(pacingMode)
+    manageWin.transition.direction = "left"
+    manageWin.transition.duration = 0.01
+    manageWin.current = "welcomeWin"
+    manageWin.current = "mainWin"
+    ##testing, don't remove until assignment 2
+    global hardwareConnected
+    hardwareConnected = True
+    ##
+
+
+
+def setLRL(num):
+    global LRL
+    LRL = num
+    print("LRL: " + LRL)
+
+def setURL(num):
+    global URL
+    URL = num
+    print("URL: " + URL)
+
+def setAtrAmp(num):
+    global AtrAmp
+    AtrAmp = num
+    print("AtrAmp: " + AtrAmp)
+    
+def setAtrPulseWidth(num):
+    global AtrPulseWidth
+    AtrPulseWidth = num
+    print("AtrPulseWidth: " + AtrPulseWidth)
+    
+def setVentAmp(num):
+    global VentAmp
+    VentAmp = num
+    print("VentAmp: " + VentAmp)
+    
+def setVentPulseWidth(num):
+    global VentPulseWidth
+    VentPulseWidth = num
+    print("VentPulseWidth: " + VentPulseWidth)
+    
+def setVRP(num):
+    global VRP
+    VRP = num
+    print("VRP: " + VRP)
+    
+def setARP(num):
+    global ARP
+    ARP = num
+    print("ARP: " + ARP)
+
+
+
+## Declare all Popups Layout Classes ----------------------------------------------------------------------
+
+## Main page popups
+class modeSelectorPopup(FloatLayout):
     def closePopup(self):
         popupWindow.dismiss()
 
+    def setPacingMode(self,mode):
+        setPacingModetext(mode)
 
-#maximum accounts reached 
-class errorMaxPopup(FloatLayout):    
+class programmableParametersPopup(FloatLayout):
+    
+    def setIndex(self, num):
+        global index
+        index = num
+
+    def open_textInput(self, title):
+        show = textInputPopup()
+        global popupWindow_editParameter
+        popupWindow_editParameter = Popup(title=title, content=show,size_hint=(None,None), size=(500,200))
+        popupWindow_editParameter.open()
+
     def closePopup(self):
         popupWindow.dismiss()
 
+class textInputPopup(FloatLayout):
 
+    inputField = ObjectProperty(None)
+
+    def selectProgParam(self):
+        num = self.inputField.text
+
+        if index == 1:
+            setLRL(num)
+        elif index == 2:
+            setURL(num)
+        elif index == 3:
+            setAtrAmp(num)
+        elif index == 4:
+            setAtrPulseWidth(num)
+        elif index == 5:
+            setARP(num)
+        elif index == 6:
+            setVentAmp(num)
+        elif index == 7:
+            setVentPulseWidth(num)
+        elif index == 8:
+            setVRP(num)
+
+    def closePopup(self):
+        popupWindow_editParameter.dismiss()
+
+
+## Generic Errors
+class errorPopup(FloatLayout):
+    def closePopup(self):
+        popupWindow.dismiss()
+
+## maximum accounts reached 
+class errorMaxPopup(FloatLayout):
+    def closePopup(self):
+        popupWindow.dismiss()
+
+## Auto-timout Popup
 class successPopup(FloatLayout):
     def __init__(self, **kwargs):
         super(successPopup, self).__init__(**kwargs)
-        # call dismiss_popup in 1 second
+        # call dismiss_popup after 1 second
         Clock.schedule_once(self.closePopup, 1)
 
     def closePopup(self, timer):
         popupWindow.dismiss()
 
+
+## Initialize the Popups ------------------------------------------------------
 
 def invalidLogin():
     show = errorPopup()
@@ -222,8 +358,6 @@ def signOut_Complete():
     popupWindow.open()
 
 def accountLimitReached():
-    #errorPopup().setMessage(message = "Account Limit Reached. Only 10 accounts can be stored locally at once.")
-    #print(errorPopup().dialogueMessage.text)
     show = errorMaxPopup()
     global popupWindow
     popupWindow = Popup(title="Error", content=show,size_hint=(None,None), size=(300,200))
@@ -236,6 +370,25 @@ def userDeleted():
     popupWindow.open()
 
 
+
+
+## WindowManager --------------------------------------------
+
+class WindowManager(ScreenManager):
+    pass
+
+manageWin = WindowManager(transition=SlideTransition())
+
+## Add all the pages ------------------------------------------
+manageWin.add_widget(WelcomeWindow(name="welcomeWin"))
+manageWin.add_widget(LoginWindow(name="loginWin"))
+manageWin.add_widget(RegisterWindow(name="registerWin"))
+manageWin.add_widget(MainWindow(name="mainWin"))
+
+manageWin.current = "welcomeWin"
+
+
+## Database Details ----------------------------------------------------------------------
 
 #check if file exists
 if(os.path.isfile("saved_users.txt")):
